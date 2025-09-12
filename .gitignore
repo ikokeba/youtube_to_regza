@@ -1,0 +1,12 @@
+.venv/
+*.mp4
+*.m4a
+*.mkv
+*.avi
+*.mov
+*.wmv
+*.flv
+*.webm
+config.json
+temp/
+output/

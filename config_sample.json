@@ -1,0 +1,18 @@
+{
+    "output_directory": "./output",
+    "temp_directory": "./temp",
+    "video_settings": {
+        "resolution": "1920x1080",
+        "codec": "libx264",
+        "profile": "high",
+        "level": "4.0",
+        "framerate": "29.97",
+        "quality": "20",
+        "audio_codec": "copy"
+    },
+    "advanced_settings": {
+        "auto_cleanup": true,
+        "overwrite_existing": true,
+        "show_progress": true
+    }
+}
