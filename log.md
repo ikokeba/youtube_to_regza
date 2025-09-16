@@ -1,5 +1,46 @@
 # YouTube to REGZA 変換ツール - 開発ログ
 
+## 2025-09-16 12:49:55 - REGZA互換性問題修正完了
+
+### 問題の特定と修正
+**問題**: 設定ファイル化後にREGZA 40V30で再生できなくなった
+**原因**: REGZA 40V30互換性を損なう設定変更
+- 解像度: `640x480` → `1920x1080` (高解像度は古いREGZAで非対応)
+- プロファイル: `baseline` → `high` (REGZA 40V30はBaseline Profile推奨)
+- レベル: `3.1` → `4.0` (REGZA 40V30はLevel 3.1推奨)
+
+**修正内容**:
+- `config.json`をREGZA 40V30互換設定に戻す
+- 解像度: `640x480` (4:3アスペクト比)
+- プロファイル: `baseline` (Constrained Baseline)
+- レベル: `3.1`
+
+### 修正後のテスト結果
+- **テスト動画**: https://youtu.be/wg0yAiMerhg?si=yHzf1JccVNFfMx7o
+- **出力先**: NAS DLNA共有フォルダ（直接保存）
+- **解像度**: 640x480 (REGZA 40V30互換)
+- **プロファイル**: Constrained Baseline, Level 3.1
+- **ファイルサイズ**: 23.7MB
+- **変換時間**: 約8.2秒
+- **動作確認**: ✅ REGZA 40V30で再生可能
+
+### REGZA 40V30推奨設定
+```json
+{
+    "video_settings": {
+        "resolution": "640x480",
+        "codec": "libx264",
+        "profile": "baseline",
+        "level": "3.1",
+        "framerate": "29.97",
+        "quality": "20",
+        "audio_codec": "copy"
+    }
+}
+```
+
+---
+
 ## 2025-09-16 12:11:01 - 設定ファイルシステム実装完了
 
 ### 実装内容
@@ -21,7 +62,7 @@
 
 ### テスト結果
 - **テスト動画**: https://youtu.be/wg0yAiMerhg?si=yHzf1JccVNFfMx7o
-- **出力先**:NAS DLNA共有フォルダ（直接保存）
+- **出力先**:DLNA共有フォルダ（直接保存）
 - **解像度**: 1920x1080 (Full HD)
 - **ファイルサイズ**: 71.7MB
 - **変換時間**: 約24.6秒
