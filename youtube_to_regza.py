@@ -168,7 +168,7 @@ def main():
     convert_to_regza_spec(str(temp_file), str(output_file), config)
 
     print(f"REGZA-compatible MP4 created: {output_file}")
-    print("Place this file in your QNAP NAS DLNA shared folder and rescan.")
+    print("Place this file in your NAS DLNA shared folder and rescan.")
 
 if __name__ == "__main__":
     main()
