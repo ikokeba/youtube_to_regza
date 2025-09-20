@@ -3,7 +3,9 @@ import sys
 import os
 import json
 import re
+import time
 from pathlib import Path
+from tqdm import tqdm
 
 def load_config():
     """設定ファイルを読み込み"""
@@ -75,10 +77,12 @@ def get_video_title(url):
 def download_youtube_video(url, temp_output="temp_video.mp4"):
     """YouTube動画を最高品質のMP4でダウンロード"""
     try:
+        # yt-dlpの進捗表示を有効にしてダウンロード
         subprocess.run([
             "yt-dlp",
             "-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
             "-o", temp_output,
+            "--progress",  # 進捗表示を有効化
             url
         ], check=True)
         print(f"Downloaded video to {temp_output}")
@@ -114,22 +118,74 @@ def convert_to_regza_spec(input_file, output_file, config):
         "-c:a", video_settings["audio_codec"]
     ]
     
-    # プログレス表示設定
-    if advanced_settings.get("show_progress", True):
-        cmd.extend(["-progress", "pipe:1"])
-    
     cmd.append(output_file)
     
     try:
-        subprocess.run(cmd, check=True)
+        # tqdmを使用した進捗表示
+        if advanced_settings.get("show_progress", True):
+            print("Converting video... (This may take several minutes)")
+            # ffmpegの進捗をパースしてtqdmで表示
+            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', errors='ignore')
+            
+            # 進捗バーを初期化
+            pbar = tqdm(total=100, desc="Converting", unit="%")
+            
+            duration_seconds = None
+            
+            while True:
+                output = process.stderr.readline()
+                if output == '' and process.poll() is not None:
+                    break
+                if output:
+                    # ffmpegの進捗情報をパース
+                    try:
+                        # duration情報を探す
+                        if "Duration:" in output:
+                            duration_str = output.split("Duration: ")[1].split(",")[0]
+                            # HH:MM:SS.mmm形式を秒に変換
+                            time_parts = duration_str.split(":")
+                            duration_seconds = float(time_parts[0]) * 3600 + float(time_parts[1]) * 60 + float(time_parts[2])
+                            pbar.set_description(f"Converting (Duration: {duration_str})")
+                        elif "time=" in output and duration_seconds:
+                            time_str = output.split("time=")[1].split(" ")[0]
+                            time_parts = time_str.split(":")
+                            current_seconds = float(time_parts[0]) * 3600 + float(time_parts[1]) * 60 + float(time_parts[2])
+                            progress = (current_seconds / duration_seconds) * 100
+                            pbar.n = min(progress, 100)
+                            pbar.refresh()
+                    except (ValueError, IndexError):
+                        pass
+            
+            pbar.close()
+            
+            # プロセスの終了を待つ
+            return_code = process.wait()
+            if return_code != 0:
+                raise subprocess.CalledProcessError(return_code, cmd)
+        else:
+            subprocess.run(cmd, check=True)
+        
         print(f"Converted to {output_file}")
     except subprocess.CalledProcessError as e:
         print(f"Error converting video: {e}")
         sys.exit(1)
     finally:
         if advanced_settings.get("auto_cleanup", True) and os.path.exists(input_file):
-            os.remove(input_file)
-            print(f"Cleaned up temporary file: {input_file}")
+            try:
+                # ファイルが使用中の場合、少し待ってから再試行
+                import time
+                for attempt in range(3):
+                    try:
+                        os.remove(input_file)
+                        print(f"Cleaned up temporary file: {input_file}")
+                        break
+                    except PermissionError:
+                        if attempt < 2:  # 最後の試行でない場合
+                            time.sleep(1)  # 1秒待機
+                        else:
+                            print(f"Warning: Could not delete temporary file {input_file} (file may be in use)")
+            except Exception as e:
+                print(f"Warning: Error cleaning up temporary file {input_file}: {e}")
 
 def main():
     if len(sys.argv) != 2:
@@ -147,7 +203,10 @@ def main():
     temp_dir.mkdir(parents=True, exist_ok=True)
     output_dir.mkdir(parents=True, exist_ok=True)
     
-    temp_file = temp_dir / "temp_video.mp4"
+    # 同時実行対応: タイムスタンプとプロセスIDを含む一意なファイル名
+    timestamp = int(time.time() * 1000)  # ミリ秒のタイムスタンプ
+    process_id = os.getpid()
+    temp_file = temp_dir / f"temp_video_{timestamp}_{process_id}.mp4"
     
     # 動画タイトルを取得してファイル名を生成
     print("Getting video title...")
@@ -158,10 +217,25 @@ def main():
 
     # 既存の出力ファイルがあれば削除
     if config["advanced_settings"].get("overwrite_existing", True) and output_file.exists():
-        output_file.unlink()
-        print(f"Removed existing file: {output_file}")
+        try:
+            # ファイルが使用中の場合、少し待ってから再試行
+            for attempt in range(3):
+                try:
+                    output_file.unlink()
+                    print(f"Removed existing file: {output_file}")
+                    break
+                except PermissionError:
+                    if attempt < 2:  # 最後の試行でない場合
+                        time.sleep(1)  # 1秒待機
+                    else:
+                        print(f"Warning: Could not remove existing file {output_file} (file may be in use)")
+                        print("Continuing with conversion...")
+        except Exception as e:
+            print(f"Warning: Error removing existing file {output_file}: {e}")
+            print("Continuing with conversion...")
 
-    # 動画ダウンロード
+    # 動画ダウンロード（進捗表示付き）
+    print("Downloading video...")
     download_youtube_video(youtube_url, str(temp_file))
 
     # REGZA仕様に変換
